@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>TabSync</title>
+    <link rel="icon" href="data:," />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="now">
+        <div class="now-meta">
+          <div id="np-title" class="np-title">Waiting for Spotify…</div>
+          <div id="np-artist" class="np-artist">Play a song in Spotify on this device</div>
+        </div>
+        <div class="now-side">
+          <span id="np-source" class="badge" hidden></span>
+          <span id="np-time" class="time"></span>
+        </div>
+      </div>
+      <div class="progress"><div id="np-progress" class="progress-fill"></div></div>
+      <div class="toolbar">
+        <span id="match-info" class="match-info"></span>
+        <select id="tab-select" hidden aria-label="Tab version"></select>
+        <button id="btn-follow" class="toggle" aria-pressed="true" title="Follow the song position">Follow</button>
+        <button id="btn-songsterr" hidden title="Open this song's tab on Songsterr">Songsterr ↗</button>
+        <button id="btn-wrong" title="Pick a different song">Wrong tab?</button>
+        <button id="btn-settings" title="Settings">Settings</button>
+      </div>
+    </header>
+
+    <div id="banner" class="banner" hidden></div>
+
+    <main id="scroll" class="scroll">
+      <section id="panel" class="panel" hidden></section>
+      <div id="tab"></div>
+    </main>
+
+    <!-- In-app Songsterr page (desktop): a native webview is laid over #embed-area. -->
+    <section id="embed" class="embed" hidden>
+      <div class="embed-bar">
+        <span id="embed-title" class="match-info"></span>
+        <button id="btn-embed-browser" type="button">Open in browser ↗</button>
+        <button id="btn-embed-close" type="button">Back to tab</button>
+      </div>
+      <div id="embed-area" class="embed-area"></div>
+    </section>
+
+    <dialog id="settings">
+      <form method="dialog" class="settings">
+        <h2>Settings</h2>
+        <label>
+          Tab server URL
+          <input id="set-server" type="url" placeholder="http://192.168.1.10:8787" required />
+          <small>On Android use your computer's LAN IP (emulator: http://10.0.2.2:8787).</small>
+        </label>
+        <label class="row">
+          <input id="set-fallback" type="checkbox" />
+          Use Spotify Web API when the device sees nothing
+        </label>
+        <div class="row">
+          <span id="spotify-status" class="muted">Spotify: unknown</span>
+          <button id="btn-spotify" type="button">Connect Spotify</button>
+        </div>
+        <label>
+          Follow offset: <output id="set-offset-out">0.0 s</output>
+          <input id="set-offset" type="range" min="-5" max="5" step="0.1" value="0" />
+        </label>
+        <label>
+          Zoom: <output id="set-zoom-out">100%</output>
+          <input id="set-zoom" type="range" min="0.6" max="1.6" step="0.1" value="1" />
+        </label>
+        <div class="row end">
+          <button id="btn-test" type="button">Test server</button>
+          <button value="close" class="primary">Done</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

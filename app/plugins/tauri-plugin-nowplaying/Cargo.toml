@@ -1,0 +1,22 @@
+[package]
+name = "tauri-plugin-nowplaying"
+version = "0.1.0"
+edition = "2021"
+description = "Reads the currently playing track from the OS media session (macOS, Windows, Android)."
+links = "tauri-plugin-nowplaying"
+exclude = ["/android/build", "/android/.gradle"]
+
+[dependencies]
+tauri = "2"
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = [
+  "Foundation",
+  "Foundation_Collections",
+  "Media_Control",
+] }
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }

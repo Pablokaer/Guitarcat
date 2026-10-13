@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!--
+          Declaring a NotificationListenerService is what lets the user grant
+          "Notification access" to the app, which in turn unlocks
+          MediaSessionManager.getActiveSessions() for other apps (Spotify).
+          The service itself does nothing with notifications.
+        -->
+        <service
+            android:name="com.tabsync.nowplaying.NowPlayingListenerService"
+            android:label="TabSync now playing"
+            android:exported="true"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>

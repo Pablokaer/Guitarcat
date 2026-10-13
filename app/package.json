@@ -1,0 +1,22 @@
+{
+  "name": "@tabsync/app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@coderline/alphatab": "^1.8.0",
+    "@tauri-apps/api": "^2.10.0",
+    "@tauri-apps/plugin-opener": "^2.5.0"
+  },
+  "devDependencies": {
+    "@coderline/alphatab-vite": "^1.8.4",
+    "@tauri-apps/cli": "^2.10.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.0"
+  }
+}
