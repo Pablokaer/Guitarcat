@@ -1,0 +1,223 @@
+name: Release
+
+# Builds installable apps and attaches them to a GitHub release:
+#   - Windows: .msi and .exe (NSIS) installers
+#   - macOS:   universal .dmg (Apple Silicon + Intel)
+#   - Android: universal .apk
+#
+# Push a tag matching the app version (app/src-tauri/tauri.conf.json) to publish:
+#   git tag v0.2.0 && git push origin v0.2.0
+# Or run it by hand from the Actions tab: it builds into a draft release, and
+# publishes it only if "publish" is ticked.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the release when every build succeeds (otherwise it stays a draft)
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Create draft release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      release_id: ${{ steps.release.outputs.id }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        name: Read app version
+        run: |
+          VERSION=$(node -p "require('./app/src-tauri/tauri.conf.json').version")
+          TAG="v$VERSION"
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF_NAME" != "$TAG" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match the app version $VERSION in tauri.conf.json"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - id: release
+        name: Create or reuse the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          existing=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
+            -q ".[] | select(.tag_name == \"$TAG\") | [.id, .draft] | @tsv" | head -1)
+          if [ -n "$existing" ]; then
+            id=$(cut -f1 <<<"$existing"); draft=$(cut -f2 <<<"$existing")
+            if [ "$draft" != "true" ]; then
+              echo "::error::Release $TAG is already published. Bump the version in app/src-tauri/tauri.conf.json (and app/src-tauri/Cargo.toml) first."
+              exit 1
+            fi
+            echo "Reusing draft release $id"
+          else
+            id=$(gh api "repos/$GITHUB_REPOSITORY/releases" \
+              -f tag_name="$TAG" -f target_commitish="$GITHUB_SHA" \
+              -f name="TabSync $VERSION" -F draft=true \
+              -F body=@.github/release-notes.md -q .id)
+            echo "Created draft release $id"
+          fi
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
+  desktop:
+    name: Build ${{ matrix.name }}
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS (universal)
+            os: macos-latest
+            args: --target universal-apple-darwin
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+          - name: Windows
+            os: windows-latest
+            args: ""
+            rust-targets: ""
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri
+      - name: Install app dependencies
+        working-directory: app
+        run: npm ci
+      # Code signing is optional: add APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD,
+      # APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD and APPLE_TEAM_ID as
+      # repository secrets and pass them here as env to sign and notarize on macOS.
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          projectPath: app
+          tauriScript: npm run tauri
+          releaseId: ${{ needs.prepare.outputs.release_id }}
+          args: ${{ matrix.args }}
+
+  android:
+    name: Build Android (universal APK)
+    needs: prepare
+    runs-on: ubuntu-latest
+    env:
+      NDK_VERSION: 27.2.12479018
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - name: Install the Android NDK
+        run: |
+          sdkmanager --install "ndk;$NDK_VERSION"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri
+      - name: Install app dependencies
+        working-directory: app
+        run: npm ci
+      # src-tauri/gen is not committed; generate the Android project here.
+      - name: Generate the Android project
+        working-directory: app
+        run: npx tauri android init --ci
+      # The app talks to the TabSync server over plain HTTP on the LAN, which
+      # Android release builds block by default.
+      - name: Allow cleartext HTTP to the tab server
+        working-directory: app/src-tauri/gen/android
+        run: |
+          gradle=app/build.gradle.kts
+          manifest=app/src/main/AndroidManifest.xml
+          if grep -q 'usesCleartextTraffic"\] = "false"' "$gradle"; then
+            sed -i 's/usesCleartextTraffic"\] = "false"/usesCleartextTraffic"] = "true"/' "$gradle"
+          elif ! grep -q usesCleartextTraffic "$manifest"; then
+            sed -i 's/<application/<application android:usesCleartextTraffic="true"/' "$manifest"
+          fi
+          grep -n usesCleartextTraffic "$gradle" "$manifest" || true
+      - name: Build the APK
+        working-directory: app
+        run: npx tauri android build --apk --ci
+      - name: Sign the APK
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          apk=$(find app/src-tauri/gen/android/app/build/outputs/apk -name '*universal*release*.apk' | head -1)
+          [ -n "$apk" ] || { echo "::error::No release APK found"; find app/src-tauri/gen/android/app/build/outputs -name '*.apk'; exit 1; }
+          bt=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            export KS_PASS="$ANDROID_KEYSTORE_PASSWORD" KEY_PASS="${ANDROID_KEY_PASSWORD:-$ANDROID_KEYSTORE_PASSWORD}"
+            alias="$ANDROID_KEY_ALIAS"
+          else
+            echo "::warning::ANDROID_KEYSTORE_BASE64 is not set: signing with a one-off key. Installs work, but updating to the next release needs an uninstall first. See README → Releases."
+            export KS_PASS=ci-temporary KEY_PASS=ci-temporary
+            alias=tabsync
+            keytool -genkeypair -keystore "$RUNNER_TEMP/release.jks" -storepass "$KS_PASS" -keypass "$KEY_PASS" \
+              -alias "$alias" -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=TabSync CI"
+          fi
+          "$bt/zipalign" -p -f 4 "$apk" "$RUNNER_TEMP/aligned.apk"
+          mkdir -p dist-android
+          "$bt/apksigner" sign --ks "$RUNNER_TEMP/release.jks" --ks-pass env:KS_PASS --ks-key-alias "$alias" \
+            --key-pass env:KEY_PASS --out "dist-android/TabSync_${VERSION}_android_universal.apk" "$RUNNER_TEMP/aligned.apk"
+          "$bt/apksigner" verify "dist-android/TabSync_${VERSION}_android_universal.apk"
+          rm -f "$RUNNER_TEMP/release.jks"
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.prepare.outputs.release_id }}
+        run: |
+          for f in dist-android/*.apk; do
+            name=$(basename "$f")
+            # Replace an asset left by an earlier run of the same draft.
+            old=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets" -q ".[] | select(.name == \"$name\") | .id")
+            [ -n "$old" ] && gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$old"
+            curl -sSf -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Content-Type: application/vnd.android.package-archive" \
+              --data-binary @"$f" "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=$name" > /dev/null
+            echo "Uploaded $name"
+          done
+
+  publish:
+    name: Publish release
+    needs: [prepare, desktop, android]
+    if: github.event_name == 'push' || inputs.publish
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.prepare.outputs.release_id }}
+        run: gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -F draft=false -f make_latest=true -q .html_url

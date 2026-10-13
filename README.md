@@ -86,7 +86,7 @@ npm run tauri build        # installer: .dmg/.app (macOS), .msi/.exe (Windows)
 
 - **macOS:** the first time TabSync reads Spotify, macOS asks permission to control Spotify. If you click "Don't Allow" by mistake, re-enable it in System Settings → Privacy & Security → Automation. In `tauri dev` the prompt names your terminal app instead of TabSync.
 - **Windows:** no setup needed. Works with the Spotify desktop installer and the Microsoft Store version. SMTC doesn't expose the Spotify track ID, so Windows matches by artist and title only.
-- In **Settings**, the server URL defaults to `http://127.0.0.1:8787`.
+- In the **Tools** sidebar, the server URL defaults to `http://127.0.0.1:8787`.
 
 ## 3. Android app
 
@@ -120,13 +120,26 @@ Development Mode requires the app owner to have Spotify Premium and allows up to
 
 ## 5. Songsterr
 
-- **Songsterr** in the toolbar shows the song's Songsterr page inside the app, in place of the tab (desktop). While the panel is open it follows Spotify: each new song loads its Songsterr page, or Songsterr's search when there's no direct match. The app remembers that the panel was open. *Back to tab* closes it; *Open in browser* is there too. On Android the button opens the browser instead.
+- On desktop, Songsterr is the main viewer. Each new Spotify song opens its Songsterr page (turn off *Follow Spotify* in the Tools sidebar to keep the current page). "Tablature found" is shown only when Songsterr's title and artist match the song; otherwise the closest result is shown as *No confident match*, and *Wrong tab?* lets you pick another, which is remembered for that song. On Android, Songsterr opens in the browser.
+- Around the viewer: the Spotify player (expand, collapse to a strip, or hide), the navigation sidebar (History, Favorites, Recent Tabs; expanded, compact or hidden), the Tools sidebar and the toolbar. Each sidebar has its own hide button; the layout is saved. **Focus Mode** (⌘⇧F, Esc to leave) hides everything but the tab. Shortcuts are listed in the Tools sidebar and in the macOS *Layout* menu.
+  - Hiding or resizing panels only moves the native Songsterr view; it never reloads the page.
   - Songsterr blocks iframes, so the panel is a native child webview laid over the window. That needs Tauri's `unstable` feature (enabled in `src-tauri/Cargo.toml`).
   - The server only uses Songsterr's public search; it never downloads or stores their tabs, and the app doesn't modify their page.
 
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/v1/songsterr/search?q=` | Songsterr search results (links only) |
+
+## 6. CI and releases
+
+- **CI** (`.github/workflows/ci.yml`) runs on every push and pull request: server typecheck and tests, app tests and build, plugin tests on macOS and a compile check on Windows.
+- **Release** (`.github/workflows/release.yml`) builds the installable apps and attaches them to a GitHub release: a universal `.dmg` for macOS, `.msi` and `.exe` installers for Windows, and a universal `.apk` for Android.
+  1. Set the new version in `app/src-tauri/tauri.conf.json` (and `app/src-tauri/Cargo.toml`).
+  2. Push a matching tag: `git tag v0.2.0 && git push origin v0.2.0`. Every build runs, and the release is published when all succeed.
+  - You can also run *Release* by hand from the Actions tab. It builds into a **draft** release, and publishes it only if you tick *publish*.
+- **Android signing:** add the repository secrets `ANDROID_KEYSTORE_BASE64` (`base64 -i release.jks`), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`. Without them each release is signed with a one-off key, so updating needs an uninstall first. Create a keystore once with `keytool -genkeypair -v -keystore release.jks -alias tabsync -keyalg RSA -keysize 2048 -validity 10000` and keep it safe: losing it means users must reinstall.
+- **macOS signing (optional):** the builds are not notarized, so the first launch needs `xattr -cr /Applications/TabSync.app`. To sign and notarize, add the `APPLE_*` secrets listed in the workflow and pass them to the Tauri step.
+- The Android build allows plain HTTP so the app can reach the TabSync server on your LAN.
 
 ## Known MVP limitations / next steps
 
