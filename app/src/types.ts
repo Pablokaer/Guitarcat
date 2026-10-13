@@ -7,6 +7,9 @@ export interface Track {
   positionMs?: number | null;
   isPlaying: boolean;
   spotifyId?: string | null;
+  /** Spotify volume 0–100 (macOS only). */
+  volume?: number | null;
+  artworkUrl?: string | null;
   source: "os" | "spotify-api";
   player: string;
 }
@@ -44,4 +47,11 @@ export interface LookupResponse {
   confidence: number;
   method: "external-id" | "exact" | "fuzzy" | "none";
   candidates: Song[];
+}
+
+/** Which playback controls the device detector can drive (see the nowplaying plugin). */
+export interface PlaybackCapabilities {
+  transport: boolean;
+  seek: boolean;
+  volume: boolean;
 }

@@ -31,6 +31,7 @@ export interface NowPlayingTrack {
   positionMs?: number;
   isPlaying: boolean;
   spotifyId?: string;
+  artworkUrl?: string;
   source: "os" | "spotify-api";
   player: string;
 }
@@ -127,6 +128,13 @@ export function disconnect(db: Db): void {
   deleteSetting(db, TOKENS_KEY);
 }
 
+/** Spotify lists album images largest first; a ~300 px one suits the player. */
+export function pickArtwork(images: { url: string; width?: number | null }[] | undefined): string | undefined {
+  if (!images?.length) return undefined;
+  const fit = images.filter((i) => (i.width ?? 0) >= 200).at(-1);
+  return (fit ?? images[0]).url;
+}
+
 // Tiny cache so several clients polling at once only cost one Spotify call.
 let cache: { at: number; value: NowPlayingTrack | null } | null = null;
 const CACHE_MS = 2_000;
@@ -152,7 +160,7 @@ export async function currentlyPlaying(db: Db, cfg: SpotifyConfig): Promise<NowP
         name: string;
         duration_ms: number;
         artists?: { name: string }[];
-        album?: { name: string };
+        album?: { name: string; images?: { url: string; width?: number | null }[] };
       };
     };
     // Ads, podcasts and unknown items are ignored.
@@ -165,6 +173,7 @@ export async function currentlyPlaying(db: Db, cfg: SpotifyConfig): Promise<NowP
         positionMs: j.progress_ms ?? undefined,
         isPlaying: j.is_playing,
         spotifyId: j.item.id,
+        artworkUrl: pickArtwork(j.item.album?.images),
         source: "spotify-api",
         player: "Spotify (Web API)",
       };

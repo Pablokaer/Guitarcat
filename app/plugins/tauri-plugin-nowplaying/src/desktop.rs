@@ -1,13 +1,26 @@
 //! Desktop detectors. Each call does a fresh, synchronous read; the caller runs it
 //! on a blocking thread.
 
-use crate::models::NowPlayingResponse;
+use crate::models::{NowPlayingResponse, PlaybackCapabilities};
 use crate::Result;
 
 /// Read the current track from the OS. `track: None` when nothing is playing,
 /// Spotify is closed, or an ad is playing.
 pub fn read_now_playing() -> Result<NowPlayingResponse> {
     imp::read()
+}
+
+/// Sends a playback command to Spotify. See `commands::control` for the actions.
+pub fn control(action: &str, value: Option<f64>) -> Result<()> {
+    imp::control(action, value)
+}
+
+pub fn capabilities() -> PlaybackCapabilities {
+    imp::CAPABILITIES
+}
+
+fn unsupported(action: &str) -> crate::Error {
+    crate::Error::Detector(format!("playback action \"{action}\" is not supported on this platform"))
 }
 
 // ---------------------------------------------------------------------------
@@ -17,13 +30,16 @@ pub fn read_now_playing() -> Result<NowPlayingResponse> {
 mod imp {
     use std::process::Command;
 
-    use crate::models::{spotify_track_id, NowPlayingResponse, Track};
+    use crate::models::{spotify_track_id, NowPlayingResponse, PlaybackCapabilities, Track};
     use crate::{Error, Result};
+
+    pub const CAPABILITIES: PlaybackCapabilities = PlaybackCapabilities { transport: true, seek: true, volume: true };
 
     // `application "Spotify" is running` is checked first so polling never
     // launches Spotify. Fields are separated by the ASCII unit separator (31),
     // which cannot appear in titles. Position is converted to integer ms inside
     // AppleScript so the decimal separator of the user's locale does not matter.
+    // Artwork is read inside `try`: older Spotify builds lack `artwork url`.
     const SCRIPT: &str = r#"
 if application "Spotify" is running then
   tell application "Spotify"
@@ -31,14 +47,18 @@ if application "Spotify" is running then
     set t to current track
     set sep to character id 31
     set pos to ((player position) * 1000) as integer
-    return (name of t) & sep & (artist of t) & sep & (album of t) & sep & ((duration of t) as text) & sep & (pos as text) & sep & ((player state) as text) & sep & (id of t)
+    set art to ""
+    try
+      set art to artwork url of t
+    end try
+    return (name of t) & sep & (artist of t) & sep & (album of t) & sep & ((duration of t) as text) & sep & (pos as text) & sep & ((player state) as text) & sep & (id of t) & sep & ((sound volume) as text) & sep & art
   end tell
 end if
 return ""
 "#;
 
-    pub fn read() -> Result<NowPlayingResponse> {
-        let out = Command::new("/usr/bin/osascript").arg("-e").arg(SCRIPT).output()?;
+    fn osascript(script: &str) -> Result<String> {
+        let out = Command::new("/usr/bin/osascript").arg("-e").arg(script).output()?;
         if !out.status.success() {
             let err = String::from_utf8_lossy(&out.stderr);
             // -1743: the user denied Automation access to Spotify.
@@ -49,7 +69,34 @@ return ""
             }
             return Err(Error::Detector(err.trim().to_string()));
         }
-        Ok(NowPlayingResponse { track: parse(&String::from_utf8_lossy(&out.stdout)) })
+        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+    }
+
+    pub fn read() -> Result<NowPlayingResponse> {
+        Ok(NowPlayingResponse { track: parse(&osascript(SCRIPT)?) })
+    }
+
+    /// Builds the AppleScript statement for a control action. Numbers are
+    /// formatted by Rust, so they always use "." as the decimal separator, which
+    /// is what AppleScript source expects.
+    pub(super) fn control_statement(action: &str, value: Option<f64>) -> Option<String> {
+        Some(match action {
+            "playpause" => "playpause".into(),
+            "next" => "next track".into(),
+            "previous" => "previous track".into(),
+            "seek" => format!("set player position to {:.3}", value?.max(0.0) / 1000.0),
+            "volume" => format!("set sound volume to {}", value?.clamp(0.0, 100.0).round() as u8),
+            _ => return None,
+        })
+    }
+
+    pub fn control(action: &str, value: Option<f64>) -> Result<()> {
+        let stmt = control_statement(action, value).ok_or_else(|| super::unsupported(action))?;
+        // Same guard as reads: never launch Spotify just to control it.
+        osascript(&format!(
+            "if application \"Spotify\" is running then\n  tell application \"Spotify\" to {stmt}\nend if"
+        ))?;
+        Ok(())
     }
 
     pub(super) fn parse(stdout: &str) -> Option<Track> {
@@ -74,6 +121,9 @@ return ""
             position_ms: f[4].trim().parse().ok(),
             is_playing: f[5].trim() == "playing",
             spotify_id: spotify_track_id(uri),
+            // Added later than the first seven fields; absent in older outputs.
+            volume: f.get(7).and_then(|v| v.trim().parse().ok()),
+            artwork_url: f.get(8).map(|s| s.trim()).filter(|s| s.starts_with("http")).map(str::to_string),
             source: "os".into(),
             player: "Spotify (macOS)".into(),
         })
@@ -91,8 +141,11 @@ mod imp {
         GlobalSystemMediaTransportControlsSessionPlaybackStatus as Status,
     };
 
-    use crate::models::{NowPlayingResponse, Track};
+    use crate::models::{NowPlayingResponse, PlaybackCapabilities, Track};
     use crate::{Error, Result};
+
+    // SMTC has no volume control; that belongs to the system mixer.
+    pub const CAPABILITIES: PlaybackCapabilities = PlaybackCapabilities { transport: true, seek: true, volume: false };
 
     /// Windows FILETIME epoch (1601-01-01) to Unix epoch, in 100 ns ticks.
     const EPOCH_DIFF_100NS: i64 = 116_444_736_000_000_000;
@@ -180,10 +233,34 @@ mod imp {
                 is_playing,
                 // SMTC does not expose the Spotify track ID.
                 spotify_id: None,
+                volume: None,
+                // SMTC exposes a thumbnail stream, not a URL.
+                artwork_url: None,
                 source: "os".into(),
                 player: "Spotify (Windows)".into(),
             }),
         })
+    }
+
+    pub fn control(action: &str, value: Option<f64>) -> Result<()> {
+        let mgr = Manager::RequestAsync().map_err(werr)?.get().map_err(werr)?;
+        let Some(session) = find_spotify(&mgr)? else {
+            return Err(Error::Detector("Spotify is not running".into()));
+        };
+        let op = match action {
+            "playpause" => session.TryTogglePlayPauseAsync(),
+            "next" => session.TrySkipNextAsync(),
+            "previous" => session.TrySkipPreviousAsync(),
+            // Position in 100 ns ticks.
+            "seek" => match value {
+                Some(ms) => session.TryChangePlaybackPositionAsync((ms.max(0.0) * 10_000.0) as i64),
+                None => return Err(super::unsupported(action)),
+            },
+            _ => return Err(super::unsupported(action)),
+        }
+        .map_err(werr)?;
+        op.get().map_err(werr)?;
+        Ok(())
     }
 }
 
@@ -193,11 +270,17 @@ mod imp {
 // ---------------------------------------------------------------------------
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 mod imp {
-    use crate::models::NowPlayingResponse;
+    use crate::models::{NowPlayingResponse, PlaybackCapabilities};
     use crate::Result;
+
+    pub const CAPABILITIES: PlaybackCapabilities = PlaybackCapabilities { transport: false, seek: false, volume: false };
 
     pub fn read() -> Result<NowPlayingResponse> {
         Ok(NowPlayingResponse { track: None })
+    }
+
+    pub fn control(action: &str, _value: Option<f64>) -> Result<()> {
+        Err(super::unsupported(action))
     }
 }
 
@@ -212,6 +295,27 @@ mod tests {
         assert_eq!(t.position_ms, Some(12345));
         assert!(t.is_playing);
         assert_eq!(t.spotify_id.as_deref(), Some("abc"));
+        assert_eq!(t.volume, None);
+        assert_eq!(t.artwork_url, None);
+    }
+
+    #[test]
+    fn parses_volume_and_artwork() {
+        let line = "Song\u{1f}Artist\u{1f}Album\u{1f}245000\u{1f}0\u{1f}paused\u{1f}spotify:track:abc\u{1f}64\u{1f}https://i.scdn.co/image/x\n";
+        let t = super::imp::parse(line).unwrap();
+        assert!(!t.is_playing);
+        assert_eq!(t.volume, Some(64));
+        assert_eq!(t.artwork_url.as_deref(), Some("https://i.scdn.co/image/x"));
+    }
+
+    #[test]
+    fn control_statements() {
+        use super::imp::control_statement as c;
+        assert_eq!(c("playpause", None).as_deref(), Some("playpause"));
+        assert_eq!(c("seek", Some(61_500.0)).as_deref(), Some("set player position to 61.500"));
+        assert_eq!(c("volume", Some(140.0)).as_deref(), Some("set sound volume to 100"));
+        assert_eq!(c("seek", None), None);
+        assert_eq!(c("shuffle", None), None);
     }
 
     #[test]

@@ -307,6 +307,30 @@
           "markdownDescription": "Denies the check_permission command without any pre-configured scope."
         },
         {
+          "description": "Enables the control command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-control",
+          "markdownDescription": "Enables the control command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the control command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-control",
+          "markdownDescription": "Denies the control command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_capabilities command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-capabilities",
+          "markdownDescription": "Enables the get_capabilities command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_capabilities command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-capabilities",
+          "markdownDescription": "Denies the get_capabilities command without any pre-configured scope."
+        },
+        {
           "description": "Enables the get_now_playing command without any pre-configured scope.",
           "type": "string",
           "const": "allow-get-now-playing",
@@ -331,10 +355,10 @@
           "markdownDescription": "Denies the request_permission command without any pre-configured scope."
         },
         {
-          "description": "Allows reading the now-playing track and managing the detector permission.\n#### This default permission set includes:\n\n- `allow-get-now-playing`\n- `allow-check-permission`\n- `allow-request-permission`",
+          "description": "Allows reading the now-playing track, controlling playback and managing the detector permission.\n#### This default permission set includes:\n\n- `allow-get-now-playing`\n- `allow-check-permission`\n- `allow-request-permission`\n- `allow-control`\n- `allow-get-capabilities`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Allows reading the now-playing track and managing the detector permission.\n#### This default permission set includes:\n\n- `allow-get-now-playing`\n- `allow-check-permission`\n- `allow-request-permission`"
+          "markdownDescription": "Allows reading the now-playing track, controlling playback and managing the detector permission.\n#### This default permission set includes:\n\n- `allow-get-now-playing`\n- `allow-check-permission`\n- `allow-request-permission`\n- `allow-control`\n- `allow-get-capabilities`"
         }
       ]
     }

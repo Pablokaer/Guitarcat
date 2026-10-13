@@ -1,6 +1,6 @@
 use tauri::{command, AppHandle, Runtime};
 
-use crate::models::{NowPlayingResponse, PermissionResponse};
+use crate::models::{NowPlayingResponse, PermissionResponse, PlaybackCapabilities};
 use crate::Result;
 
 /// Returns the currently playing track, or `{ track: null }`.
@@ -18,6 +18,19 @@ pub(crate) async fn check_permission<R: Runtime>(app: AppHandle<R>) -> Result<Pe
 #[command]
 pub(crate) async fn request_permission<R: Runtime>(app: AppHandle<R>) -> Result<PermissionResponse> {
     platform_request(app)
+}
+
+/// Drives the player. `action`: "playpause" | "next" | "previous" | "seek"
+/// (`value` = position in ms) | "volume" (`value` = 0–100).
+#[command]
+pub(crate) async fn control<R: Runtime>(_app: AppHandle<R>, action: String, value: Option<f64>) -> Result<()> {
+    platform_control(action, value).await
+}
+
+/// Which controls `control` supports on this platform.
+#[command]
+pub(crate) async fn get_capabilities<R: Runtime>(_app: AppHandle<R>) -> Result<PlaybackCapabilities> {
+    Ok(platform_capabilities())
 }
 
 // ---- Desktop: reads can block briefly (osascript / WinRT), so run them off the async pool.
@@ -39,6 +52,18 @@ fn platform_request<R: Runtime>(app: AppHandle<R>) -> Result<PermissionResponse>
     platform_check(app)
 }
 
+#[cfg(desktop)]
+async fn platform_control(action: String, value: Option<f64>) -> Result<()> {
+    tauri::async_runtime::spawn_blocking(move || crate::desktop::control(&action, value))
+        .await
+        .map_err(|e| crate::Error::Detector(e.to_string()))?
+}
+
+#[cfg(desktop)]
+fn platform_capabilities() -> PlaybackCapabilities {
+    crate::desktop::capabilities()
+}
+
 // ---- Mobile: forward to the Kotlin plugin.
 #[cfg(mobile)]
 async fn platform_get<R: Runtime>(app: AppHandle<R>) -> Result<NowPlayingResponse> {
@@ -56,4 +81,15 @@ fn platform_check<R: Runtime>(app: AppHandle<R>) -> Result<PermissionResponse> {
 fn platform_request<R: Runtime>(app: AppHandle<R>) -> Result<PermissionResponse> {
     use crate::NowPlayingExt;
     app.now_playing().request_permission()
+}
+
+// Android's MediaController could do this, but the Kotlin side doesn't expose it yet.
+#[cfg(mobile)]
+async fn platform_control(_action: String, _value: Option<f64>) -> Result<()> {
+    Err(crate::Error::Detector("playback control is not supported on this platform".into()))
+}
+
+#[cfg(mobile)]
+fn platform_capabilities() -> PlaybackCapabilities {
+    PlaybackCapabilities::default()
 }

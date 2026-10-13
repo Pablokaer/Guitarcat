@@ -13,10 +13,13 @@
     "windows": [
       {
         "title": "TabSync",
-        "width": 1100,
+        "width": 1280,
         "height": 820,
-        "minWidth": 380,
-        "minHeight": 500
+        "minWidth": 480,
+        "minHeight": 420,
+        "label": "main",
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ],
     "security": {

@@ -18,6 +18,12 @@ pub struct Track {
     /// Bare Spotify track ID (no `spotify:track:` prefix) when the OS exposes it.
     #[serde(default)]
     pub spotify_id: Option<String>,
+    /// Spotify volume, 0–100, when the OS exposes it (macOS).
+    #[serde(default)]
+    pub volume: Option<u8>,
+    /// Album artwork URL, when the OS exposes it (macOS).
+    #[serde(default)]
+    pub artwork_url: Option<String>,
     /// "os" for device detectors.
     pub source: String,
     /// Which player reported it, e.g. "Spotify (macOS)".
@@ -29,6 +35,16 @@ pub struct Track {
 pub struct NowPlayingResponse {
     #[serde(default)]
     pub track: Option<Track>,
+}
+
+/// Which playback controls this platform can drive.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackCapabilities {
+    /// Play/pause, previous, next.
+    pub transport: bool,
+    pub seek: bool,
+    pub volume: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

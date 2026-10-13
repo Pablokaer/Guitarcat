@@ -7,75 +7,220 @@
     <link rel="icon" href="data:," />
   </head>
   <body>
-    <header class="topbar">
-      <div class="now">
-        <div class="now-meta">
-          <div id="np-title" class="np-title">Waiting for Spotify…</div>
-          <div id="np-artist" class="np-artist">Play a song in Spotify on this device</div>
+    <div id="app" class="app">
+      <!-- ============ Top: Spotify player (expanded / collapsed strip / hidden) ============ -->
+      <header id="player" class="player" data-state="expanded" data-tauri-drag-region>
+        <div class="player-full" data-tauri-drag-region>
+          <div class="traffic-space" data-tauri-drag-region></div>
+          <div class="np" data-tauri-drag-region>
+            <div id="np-art" class="art"><i data-icon="music" data-size="22"></i></div>
+            <div class="np-meta" data-tauri-drag-region>
+              <div id="np-title" class="np-title">Waiting for Spotify…</div>
+              <div id="np-artist" class="np-artist">Play a song in Spotify on this device</div>
+            </div>
+          </div>
+
+          <div class="transport" data-tauri-drag-region>
+            <div id="transport-buttons" class="transport-buttons" hidden>
+              <button id="btn-prev" class="icon-btn" type="button" title="Previous track" aria-label="Previous track"><i data-icon="prev" data-size="18"></i></button>
+              <button id="btn-play" class="play-btn" type="button" title="Play" aria-label="Play"><i data-icon="play" data-size="18"></i></button>
+              <button id="btn-next" class="icon-btn" type="button" title="Next track" aria-label="Next track"><i data-icon="next" data-size="18"></i></button>
+            </div>
+            <div class="timeline">
+              <span id="np-pos" class="time">–:––</span>
+              <div id="np-progress" class="progress" role="progressbar" aria-label="Playback position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <div id="np-progress-fill" class="progress-fill"></div>
+              </div>
+              <span id="np-dur" class="time">–:––</span>
+            </div>
+          </div>
+
+          <div class="player-side" data-tauri-drag-region>
+            <div id="volume" class="volume" hidden>
+              <button id="btn-mute" class="icon-btn small" type="button" title="Mute" aria-label="Mute"><i data-icon="volume" data-size="16"></i></button>
+              <input id="volume-range" type="range" min="0" max="100" step="1" value="50" aria-label="Spotify volume" />
+            </div>
+            <span id="status-pill" class="status-pill" data-tone="idle" role="status" aria-live="polite"><span class="dot"></span><span class="status-label">Waiting for playback</span></span>
+            <button id="btn-player-collapse" class="icon-btn small" type="button" title="Collapse player (⌘2)" aria-label="Collapse player"><i data-icon="chevronUp" data-size="16"></i></button>
+          </div>
         </div>
-        <div class="now-side">
-          <span id="np-source" class="badge" hidden></span>
-          <span id="np-time" class="time"></span>
+
+        <div class="player-strip" data-tauri-drag-region>
+          <div class="traffic-space" data-tauri-drag-region></div>
+          <span class="mini-dot" id="strip-dot" data-tone="idle"></span>
+          <div class="strip-meta" data-tauri-drag-region>
+            <span id="strip-title" class="strip-title">Waiting for Spotify…</span>
+            <span id="strip-artist" class="strip-artist"></span>
+          </div>
+          <span id="strip-status" class="strip-status" data-tauri-drag-region>Waiting for playback</span>
+          <button id="btn-player-expand" class="icon-btn small" type="button" title="Expand player (⌘2)" aria-label="Expand player"><i data-icon="chevronDown" data-size="16"></i></button>
         </div>
+
+        <div class="titlebar" data-tauri-drag-region>
+          <div class="traffic-space" data-tauri-drag-region></div>
+          <span id="titlebar-text" class="titlebar-text" data-tauri-drag-region>TabSync</span>
+          <button id="btn-exit-focus" class="focus-exit" type="button" title="Exit Focus Mode (⌘⇧F or Esc)"><i data-icon="exitFocus" data-size="13"></i><span>Exit Focus</span></button>
+          <button id="btn-player-show" class="icon-btn tiny" type="button" title="Show Spotify player (⌘⇧2)" aria-label="Show Spotify player"><i data-icon="chevronDown" data-size="14"></i></button>
+        </div>
+      </header>
+
+      <div class="body">
+        <!-- ============ Left: navigation ============ -->
+        <nav id="nav" class="nav" data-state="expanded" aria-label="Main">
+          <div class="nav-inner">
+            <div class="brand">
+              <span class="brand-mark"><i data-icon="guitar" data-size="16"></i></span>
+              <span class="brand-name label">TabSync</span>
+              <button id="btn-nav-hide" class="icon-btn small panel-hide" type="button" title="Hide sidebar (⌘1)" aria-label="Hide navigation sidebar"><i data-icon="sidebarLeft" data-size="17"></i></button>
+            </div>
+            <ul class="nav-list">
+              <li><button class="nav-item" data-view="tab" title="Now Playing" aria-label="Now Playing"><i data-icon="nowPlaying"></i><span class="label">Now Playing</span></button></li>
+              <li><button class="nav-item" data-view="search" title="Search (⌘K)" aria-label="Search"><i data-icon="search"></i><span class="label">Search</span></button></li>
+              <li><button class="nav-item" data-view="history" title="History" aria-label="History"><i data-icon="history"></i><span class="label">History</span></button></li>
+              <li><button class="nav-item" data-view="favorites" title="Favorites" aria-label="Favorites"><i data-icon="star"></i><span class="label">Favorites</span></button></li>
+            </ul>
+            <div class="nav-section label">Recent Tabs</div>
+            <ul id="recent" class="recent"></ul>
+            <div class="nav-foot">
+              <button id="btn-nav-compact" class="icon-btn small" type="button" title="Compact sidebar (⌘⇧1)" aria-label="Compact sidebar"><i data-icon="collapse" data-size="16"></i></button>
+            </div>
+          </div>
+        </nav>
+
+        <!-- ============ Center: toolbar + Songsterr viewer ============ -->
+        <main class="center">
+          <div id="toolbar" class="toolbar" data-visible="true">
+            <div class="toolbar-inner">
+              <div class="tb-source">
+                <span class="tb-mark"><i data-icon="guitar" data-size="14"></i></span>
+                <span id="tb-title" class="tb-title">Songsterr</span>
+              </div>
+              <div id="source-switch" class="segmented" role="group" aria-label="Tab source" hidden>
+                <button type="button" data-source="songsterr" aria-pressed="true">Songsterr</button>
+                <button type="button" data-source="local" aria-pressed="false">Local tab</button>
+              </div>
+              <form id="tb-search" class="tb-search" role="search">
+                <i data-icon="search" data-size="14"></i>
+                <input id="tb-search-input" type="search" placeholder="Search songs…" aria-label="Search Songsterr" />
+              </form>
+              <div class="tb-group">
+                <button id="btn-fav" class="icon-btn" type="button" title="Save to favorites" aria-label="Save to favorites" aria-pressed="false" disabled><i data-icon="star" data-size="17"></i></button>
+                <button id="btn-refresh" class="icon-btn" type="button" title="Reload Songsterr page" aria-label="Reload Songsterr page" disabled><i data-icon="refresh" data-size="17"></i></button>
+                <button id="btn-external" class="icon-btn" type="button" title="Open in browser" aria-label="Open in browser" disabled><i data-icon="external" data-size="17"></i></button>
+              </div>
+              <span class="tb-sep"></span>
+              <div class="tb-group">
+                <button id="btn-toggle-nav" class="icon-btn" type="button" title="Navigation sidebar (⌘1)" aria-label="Toggle navigation sidebar"><i data-icon="sidebarLeft" data-size="17"></i></button>
+                <button id="btn-toggle-tools" class="icon-btn" type="button" title="Tools sidebar (⌘3)" aria-label="Toggle tools sidebar"><i data-icon="sidebarRight" data-size="17"></i></button>
+                <button id="btn-focus" class="icon-btn" type="button" title="Focus Mode (⌘⇧F)" aria-label="Focus Mode"><i data-icon="focus" data-size="17"></i></button>
+                <button id="btn-toolbar-hide" class="icon-btn" type="button" title="Hide toolbar (⌘4)" aria-label="Hide toolbar"><i data-icon="chevronUp" data-size="17"></i></button>
+              </div>
+            </div>
+          </div>
+          <!-- Shown instead of the toolbar: a thin rail above the viewer, never over it. -->
+          <div id="toolbar-rail" class="toolbar-rail">
+            <button id="btn-toolbar-show" type="button" title="Show toolbar (⌘4)" aria-label="Show toolbar"><i data-icon="chevronDown" data-size="12"></i></button>
+          </div>
+
+          <div id="banner" class="banner" hidden></div>
+
+          <section id="stage" class="stage">
+            <!-- The native Songsterr webview is laid over this element. It is never
+                 display:none, so its bounds stay valid while other layers cover it. -->
+            <div id="embed-area" class="layer embed-area">
+              <div id="stage-empty" class="empty"></div>
+            </div>
+            <div id="local" class="layer local" hidden>
+              <section id="panel" class="local-panel" hidden></section>
+              <div id="tab"></div>
+            </div>
+            <div id="page" class="layer page" hidden></div>
+          </section>
+        </main>
+
+        <!-- ============ Right: tools ============ -->
+        <aside id="tools" class="tools" data-visible="true" aria-label="Tools">
+          <div class="tools-inner">
+            <div class="tools-head">
+              <span>Tools</span>
+              <button id="btn-tools-close" class="icon-btn small panel-hide" type="button" title="Hide sidebar (⌘3)" aria-label="Hide tools sidebar"><i data-icon="sidebarRight" data-size="17"></i></button>
+            </div>
+
+            <section class="card">
+              <h3><i data-icon="music" data-size="15"></i>Spotify</h3>
+              <div class="kv"><span>Status</span><span id="tools-status" class="status-text" data-tone="idle">Waiting for playback</span></div>
+              <div class="kv"><span>Source</span><span id="tools-source" class="muted">—</span></div>
+              <p id="tools-status-detail" class="hint" hidden></p>
+              <label class="switch-row"><span>Follow Spotify<small>Open the tab of each new song</small></span><input id="set-follow-spotify" type="checkbox" class="switch" /></label>
+              <label class="switch-row"><span>Automatic tab search<small>Search Songsterr when the song changes</small></span><input id="set-auto-search" type="checkbox" class="switch" /></label>
+              <label class="switch-row"><span>Spotify Web API fallback<small>When this device sees nothing playing</small></span><input id="set-fallback" type="checkbox" class="switch" /></label>
+              <div class="kv"><span id="spotify-status" class="muted">Web API: unknown</span><button id="btn-spotify" class="btn small" type="button">Connect</button></div>
+            </section>
+
+            <section class="card">
+              <h3><i data-icon="guitar" data-size="15"></i>Current tab</h3>
+              <div id="match-info" class="match"><span class="muted">No tab open</span></div>
+              <div class="btn-grid">
+                <button id="btn-search-again" class="btn" type="button"><i data-icon="refresh" data-size="14"></i>Search again</button>
+                <button id="btn-wrong" class="btn" type="button"><i data-icon="flag" data-size="14"></i>Wrong tab?</button>
+                <button id="btn-open-songsterr" class="btn" type="button" disabled><i data-icon="external" data-size="14"></i>Open in browser</button>
+                <button id="btn-fav-2" class="btn" type="button" disabled><i data-icon="star" data-size="14"></i><span>Save</span></button>
+              </div>
+            </section>
+
+            <section id="local-card" class="card" hidden>
+              <h3><i data-icon="layers" data-size="15"></i>Local tab</h3>
+              <select id="tab-select" hidden aria-label="Tab version"></select>
+              <label class="switch-row"><span>Follow position<small>Scroll to the bar being played</small></span><input id="set-follow" type="checkbox" class="switch" /></label>
+              <label class="range-row">Follow offset <output id="set-offset-out">0.0 s</output>
+                <input id="set-offset" type="range" min="-5" max="5" step="0.1" value="0" /></label>
+              <label class="range-row">Zoom <output id="set-zoom-out">100%</output>
+                <input id="set-zoom" type="range" min="0.6" max="1.6" step="0.1" value="1" /></label>
+            </section>
+
+            <section class="card">
+              <h3><i data-icon="sidebarRight" data-size="15"></i>Layout</h3>
+              <label class="switch-row"><span>Spotify player</span><input id="lay-player" type="checkbox" class="switch" /></label>
+              <label class="switch-row"><span>Expanded player</span><input id="lay-player-expanded" type="checkbox" class="switch" /></label>
+              <label class="switch-row"><span>Navigation sidebar</span><input id="lay-nav" type="checkbox" class="switch" /></label>
+              <label class="switch-row"><span>Compact navigation</span><input id="lay-nav-compact" type="checkbox" class="switch" /></label>
+              <label class="switch-row"><span>Toolbar</span><input id="lay-toolbar" type="checkbox" class="switch" /></label>
+              <label class="switch-row"><span>Focus Mode<small>Hides everything around the tab</small></span><input id="lay-focus" type="checkbox" class="switch" /></label>
+            </section>
+
+            <section class="card">
+              <h3><i data-icon="settings" data-size="15"></i>Application</h3>
+              <label class="select-row">Theme
+                <select id="set-theme">
+                  <option value="graphite">Graphite</option>
+                  <option value="midnight">Midnight</option>
+                </select>
+              </label>
+              <label class="field">Tab server
+                <input id="set-server" type="url" placeholder="http://127.0.0.1:8787" required />
+              </label>
+              <div class="kv"><small class="muted">On Android use your computer's LAN IP.</small><button id="btn-test" class="btn small" type="button">Test</button></div>
+            </section>
+
+            <section class="card">
+              <h3><i data-icon="keyboard" data-size="15"></i>Keyboard shortcuts</h3>
+              <dl class="shortcuts">
+                <dt>Focus Mode</dt><dd><kbd>⌘</kbd><kbd>⇧</kbd><kbd>F</kbd></dd>
+                <dt>Exit Focus Mode</dt><dd><kbd>Esc</kbd></dd>
+                <dt>Navigation sidebar</dt><dd><kbd>⌘</kbd><kbd>1</kbd></dd>
+                <dt>Compact navigation</dt><dd><kbd>⌘</kbd><kbd>⇧</kbd><kbd>1</kbd></dd>
+                <dt>Expand/collapse player</dt><dd><kbd>⌘</kbd><kbd>2</kbd></dd>
+                <dt>Show/hide player</dt><dd><kbd>⌘</kbd><kbd>⇧</kbd><kbd>2</kbd></dd>
+                <dt>Tools sidebar</dt><dd><kbd>⌘</kbd><kbd>3</kbd></dd>
+                <dt>Toolbar</dt><dd><kbd>⌘</kbd><kbd>4</kbd></dd>
+                <dt>Search</dt><dd><kbd>⌘</kbd><kbd>K</kbd></dd>
+              </dl>
+              <p class="hint">Esc only works while TabSync (not the Songsterr page) has keyboard focus, so it never interferes with Songsterr.</p>
+            </section>
+          </div>
+        </aside>
       </div>
-      <div class="progress"><div id="np-progress" class="progress-fill"></div></div>
-      <div class="toolbar">
-        <span id="match-info" class="match-info"></span>
-        <select id="tab-select" hidden aria-label="Tab version"></select>
-        <button id="btn-follow" class="toggle" aria-pressed="true" title="Follow the song position">Follow</button>
-        <button id="btn-songsterr" hidden title="Open this song's tab on Songsterr">Songsterr ↗</button>
-        <button id="btn-wrong" title="Pick a different song">Wrong tab?</button>
-        <button id="btn-settings" title="Settings">Settings</button>
-      </div>
-    </header>
-
-    <div id="banner" class="banner" hidden></div>
-
-    <main id="scroll" class="scroll">
-      <section id="panel" class="panel" hidden></section>
-      <div id="tab"></div>
-    </main>
-
-    <!-- In-app Songsterr page (desktop): a native webview is laid over #embed-area. -->
-    <section id="embed" class="embed" hidden>
-      <div class="embed-bar">
-        <span id="embed-title" class="match-info"></span>
-        <button id="btn-embed-browser" type="button">Open in browser ↗</button>
-        <button id="btn-embed-close" type="button">Back to tab</button>
-      </div>
-      <div id="embed-area" class="embed-area"></div>
-    </section>
-
-    <dialog id="settings">
-      <form method="dialog" class="settings">
-        <h2>Settings</h2>
-        <label>
-          Tab server URL
-          <input id="set-server" type="url" placeholder="http://192.168.1.10:8787" required />
-          <small>On Android use your computer's LAN IP (emulator: http://10.0.2.2:8787).</small>
-        </label>
-        <label class="row">
-          <input id="set-fallback" type="checkbox" />
-          Use Spotify Web API when the device sees nothing
-        </label>
-        <div class="row">
-          <span id="spotify-status" class="muted">Spotify: unknown</span>
-          <button id="btn-spotify" type="button">Connect Spotify</button>
-        </div>
-        <label>
-          Follow offset: <output id="set-offset-out">0.0 s</output>
-          <input id="set-offset" type="range" min="-5" max="5" step="0.1" value="0" />
-        </label>
-        <label>
-          Zoom: <output id="set-zoom-out">100%</output>
-          <input id="set-zoom" type="range" min="0.6" max="1.6" step="0.1" value="1" />
-        </label>
-        <div class="row end">
-          <button id="btn-test" type="button">Test server</button>
-          <button value="close" class="primary">Done</button>
-        </div>
-      </form>
-    </dialog>
+    </div>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

@@ -7,6 +7,8 @@
 //!             (Kotlin, see `android/`). The user grants notification access once.
 //!
 //! All platforms expose the same command: `plugin:nowplaying|get_now_playing`.
+//! `control` drives Spotify (play/pause, skip, seek, volume) where the OS allows
+//! it; `get_capabilities` tells the UI which of those controls to show.
 
 use tauri::{
     plugin::{Builder, TauriPlugin},
@@ -45,7 +47,9 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
         .invoke_handler(tauri::generate_handler![
             commands::get_now_playing,
             commands::check_permission,
-            commands::request_permission
+            commands::request_permission,
+            commands::control,
+            commands::get_capabilities
         ])
         .setup(|_app, _api| {
             #[cfg(mobile)]

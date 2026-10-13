@@ -11,16 +11,24 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
  * `area`. Needs Tauri's `unstable` feature; desktop only.
  *
  * A native webview always draws above the page's DOM, so anything that should
- * appear on top of it (dialogs) must call hide() first.
+ * appear on top of it (dialogs, in-app pages) must call hide() first.
+ *
+ * Layout changes only move and resize the native view (sync); they never close or
+ * recreate it, so the Songsterr page keeps its state, scroll and playback. Only
+ * open() and reload() load a page.
  */
 export class EmbeddedPage {
   private view: Webview | null = null;
   private seq = 0;
-  private hiddenByUs = false;
+  /** Why the view is hidden; it is shown again once no reason is left. */
+  private hideReasons = new Set<string>();
+  private syncQueued = false;
+  private trackUntil = 0;
+  private _url: string | null = null;
 
   constructor(private area: HTMLElement) {
-    new ResizeObserver(() => void this.sync()).observe(area);
-    window.addEventListener("resize", () => void this.sync());
+    new ResizeObserver(() => this.refresh()).observe(area);
+    window.addEventListener("resize", () => this.refresh());
   }
 
   /** Child webviews exist on desktop Tauri only (not Android, not a plain browser). */
@@ -32,6 +40,11 @@ export class EmbeddedPage {
     return this.view !== null;
   }
 
+  /** The URL last opened (Songsterr may have navigated away from it since). */
+  get url(): string | null {
+    return this._url;
+  }
+
   private bounds() {
     const r = this.area.getBoundingClientRect();
     return { x: Math.round(r.left), y: Math.round(r.top), width: Math.max(1, Math.round(r.width)), height: Math.max(1, Math.round(r.height)) };
@@ -40,6 +53,7 @@ export class EmbeddedPage {
   /** Opens `url`, replacing any page already shown. The area must be visible. */
   async open(url: string): Promise<void> {
     await this.close();
+    this._url = url;
     // Once a window hosts several webviews, the main one must be told to keep
     // following the window size.
     await getCurrentWebview().setAutoResize(true);
@@ -50,28 +64,53 @@ export class EmbeddedPage {
       void view.once<string>("tauri://error", (e) => reject(new Error(String(e.payload))));
     });
     this.view = view;
-    this.hiddenByUs = false;
+    if (this.hideReasons.size) await view.hide();
     await this.sync();
+  }
+
+  /** Loads the current page again (explicit user action). */
+  async reload(): Promise<void> {
+    if (this._url) await this.open(this._url);
   }
 
   async close(): Promise<void> {
     const view = this.view;
     this.view = null;
+    this._url = null;
     if (view) await view.close().catch((e) => console.warn("closing embedded page failed", e));
   }
 
-  /** Temporarily hides the page, e.g. while a dialog is open. */
-  async hide(): Promise<void> {
-    if (!this.view) return;
-    this.hiddenByUs = true;
-    await this.view.hide();
+  /** Hides the page without unloading it, e.g. while an in-app page covers it. */
+  async hide(reason = "default"): Promise<void> {
+    this.hideReasons.add(reason);
+    if (this.view && this.hideReasons.size === 1) await this.view.hide();
   }
 
-  async show(): Promise<void> {
-    if (!this.view || !this.hiddenByUs) return;
-    this.hiddenByUs = false;
+  async show(reason = "default"): Promise<void> {
+    if (!this.hideReasons.delete(reason) || this.hideReasons.size) return;
+    if (!this.view) return;
     await this.view.show();
     await this.sync();
+  }
+
+  /** Re-aligns the view with the area on the next frame (cheap; calls coalesce). */
+  refresh(): void {
+    if (this.syncQueued) return;
+    this.syncQueued = true;
+    requestAnimationFrame(() => {
+      this.syncQueued = false;
+      void this.sync();
+      if (performance.now() < this.trackUntil) this.refresh();
+    });
+  }
+
+  /**
+   * Keeps the view aligned every frame for `ms`, while CSS animates the panels
+   * around the area (a ResizeObserver misses pure position changes).
+   */
+  track(ms: number): void {
+    this.trackUntil = Math.max(this.trackUntil, performance.now() + ms);
+    this.refresh();
   }
 
   /** Moves the native webview to match the area's current position and size. */

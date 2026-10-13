@@ -1,3 +1,9 @@
 [default]
-description = "Allows reading the now-playing track and managing the detector permission."
-permissions = ["allow-get-now-playing", "allow-check-permission", "allow-request-permission"]
+description = "Allows reading the now-playing track, controlling playback and managing the detector permission."
+permissions = [
+  "allow-get-now-playing",
+  "allow-check-permission",
+  "allow-request-permission",
+  "allow-control",
+  "allow-get-capabilities",
+]
