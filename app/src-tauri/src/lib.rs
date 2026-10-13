@@ -34,20 +34,23 @@ fn layout_menu<R: tauri::Runtime>(app: &tauri::App<R>) -> tauri::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_nowplaying::init())
         .setup(|_app| {
             #[cfg(target_os = "macos")]
             layout_menu(_app)?;
             Ok(())
-        })
-        .on_menu_event(|app, event| {
-            use tauri::Emitter;
-            if let Some(cmd) = event.id().0.strip_prefix("layout:") {
-                let _ = app.emit_to("main", "layout-command", cmd);
-            }
-        })
+        });
+    // Menus exist on desktop only (the Android build has no on_menu_event).
+    #[cfg(desktop)]
+    let builder = builder.on_menu_event(|app, event| {
+        use tauri::Emitter;
+        if let Some(cmd) = event.id().0.strip_prefix("layout:") {
+            let _ = app.emit_to("main", "layout-command", cmd);
+        }
+    });
+    builder
         .run(tauri::generate_context!())
         .expect("error while running TabSync");
 }
